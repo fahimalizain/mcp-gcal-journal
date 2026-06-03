@@ -40,16 +40,18 @@ export function loadPreferences(): Preferences {
   return data;
 }
 
-function matchPatterns(text: string, patterns?: { regex: string; calendarId?: string }[]): boolean {
-  if (!patterns) return false;
-  return patterns.some((p) => {
+function matchPatterns(text: string, patterns?: { regex: string; calendarId?: string }[]): { regex: string; calendarId?: string } | null {
+  if (!patterns) return null;
+  for (const p of patterns) {
     try {
-      return new RegExp(p.regex, "i").test(text);
+      if (new RegExp(p.regex, "i").test(text)) {
+        return p;
+      }
     } catch (e) {
       console.error(`Invalid regex pattern in preferences: ${p.regex}`);
-      return false;
     }
-  });
+  }
+  return null;
 }
 
 function searchNode(
@@ -58,11 +60,13 @@ function searchNode(
   node: CategoryNode,
   parent?: CategoryNode
 ): ClassificationResult | null {
-  if (matchPatterns(text, node.patterns)) {
+  const matchedPattern = matchPatterns(text, node.patterns);
+  if (matchedPattern) {
     return {
       category: name,
       color: node.color ?? parent?.color,
       googleCalendarColorId: node.googleCalendarColorId ?? parent?.googleCalendarColorId,
+      calendarId: matchedPattern.calendarId ?? node.calendarId ?? parent?.calendarId,
       is_productive: node.is_productive ?? parent?.is_productive,
     };
   }
@@ -87,6 +91,7 @@ export function classify(summary: string): ClassificationResult {
     category: prefs.untracked_category || "untracked",
     color: undefined,
     googleCalendarColorId: undefined,
+    calendarId: undefined,
   };
 }
 

@@ -80,12 +80,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "create_event",
-        description: "Create an event. Summary is classified against preferences.json",
+        description: "Create an event. Summary is classified against preferences.json to auto-assign color and calendar",
         inputSchema: {
           type: "object",
           properties: {
             account_id: { type: "string" },
-            calendar_id: { type: "string" },
+            calendar_id: { type: "string", description: "Optional — overrides the classified calendar" },
             summary: { type: "string" },
             description: { type: "string" },
             start: { type: "string", description: "ISO datetime" },
@@ -93,7 +93,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             location: { type: "string" },
             color_id: { type: "string" },
           },
-          required: ["account_id", "calendar_id", "summary", "start", "end"],
+          required: ["account_id", "summary", "start", "end"],
         },
       },
       {
@@ -196,8 +196,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const summary = args.summary as string;
       const classification = classifyOrError(summary);
       const client = await getCalendarClient(account);
+      const calendarId = (args.calendar_id as string) || classification.calendarId || "primary";
       const res = await client.events.insert({
-        calendarId: args.calendar_id as string,
+        calendarId,
         requestBody: {
           summary,
           description: (args.description as string) || undefined,

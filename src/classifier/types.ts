@@ -20,6 +20,7 @@ export interface CategoryNode {
   title: string;
   color?: string;
   googleCalendarColorId?: GoogleCalendarColorId;
+  calendarId?: string;
   is_productive?: boolean;
   patterns?: Pattern[];
   children?: Record<string, CategoryNode>;
@@ -41,5 +42,6 @@ export interface ClassificationResult {
   subcategory?: string;
   color?: string;
   googleCalendarColorId?: GoogleCalendarColorId;
+  calendarId?: string;
   is_productive?: boolean;
 }
