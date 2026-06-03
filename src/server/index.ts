@@ -7,6 +7,7 @@ import {
 import { listAccounts, getAccount } from "../store/accounts.js";
 import { getCalendarClient, refreshCalendars } from "../auth/client.js";
 import { classifyOrError, classify } from "../classifier/index.js";
+import { GoogleCalendarColorId } from "../classifier/types.js";
 
 const server = new Server(
   { name: "mcp-google-calendar-structured", version: "1.0.0" },
@@ -27,7 +28,7 @@ interface EventBody {
   location?: string;
   start?: { dateTime: string };
   end?: { dateTime: string };
-  colorId?: string;
+  colorId?: GoogleCalendarColorId;
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -203,7 +204,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           location: (args.location as string) || undefined,
           start: { dateTime: args.start as string },
           end: { dateTime: args.end as string },
-          colorId: (args.color_id as string) || classification.googleCalendarId || undefined,
+          colorId: (args.color_id as string) || classification.googleCalendarColorId || undefined,
         },
       });
       return {
@@ -223,11 +224,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.location) body.location = args.location as string;
       if (args.start) body.start = { dateTime: args.start as string };
       if (args.end) body.end = { dateTime: args.end as string };
-      if (args.color_id) body.colorId = args.color_id as string;
+      if (args.color_id) body.colorId = args.color_id as GoogleCalendarColorId;
       if (args.summary) {
         const classification = classifyOrError(args.summary as string);
-        if (!body.colorId && classification.googleCalendarId) {
-          body.colorId = classification.googleCalendarId;
+        if (!body.colorId && classification.googleCalendarColorId) {
+          body.colorId = classification.googleCalendarColorId;
         }
       }
       const res = await client.events.patch({
