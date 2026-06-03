@@ -1,6 +1,16 @@
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Ajv } from "ajv";
 import { PREFERENCES_FILE } from "../config.js";
 import { Preferences, ClassificationResult, CategoryNode } from "./types.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schemaPath = path.join(__dirname, "schema.json");
+const schema = JSON.parse(fs.readFileSync(schemaPath, "utf-8"));
+
+const ajv = new Ajv({ allErrors: true });
+const validate = ajv.compile(schema);
 
 let cached: Preferences | null = null;
 let cachedMtime = 0;
@@ -16,6 +26,15 @@ export function loadPreferences(): Preferences {
     return cached;
   }
   const data = JSON.parse(fs.readFileSync(PREFERENCES_FILE, "utf-8")) as Preferences;
+  const valid = validate(data);
+  if (!valid) {
+    const errors = validate.errors
+      ?.map((err) => `${err.instancePath || "root"}: ${err.message}`)
+      .join("\n  ");
+    throw new Error(
+      `Invalid preferences.json:\n  ${errors || "Unknown validation error"}`
+    );
+  }
   cached = data;
   cachedMtime = stat.mtimeMs;
   return data;
