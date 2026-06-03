@@ -1,0 +1,89 @@
+import fs from "fs";
+import { PREFERENCES_FILE } from "../config.js";
+import { Preferences, ClassificationResult, CategoryNode } from "./types.js";
+
+let cached: Preferences | null = null;
+let cachedMtime = 0;
+
+export function loadPreferences(): Preferences {
+  if (!fs.existsSync(PREFERENCES_FILE)) {
+    throw new Error(
+      `Preferences file not found at ${PREFERENCES_FILE}. Please copy your preferences.json there.`
+    );
+  }
+  const stat = fs.statSync(PREFERENCES_FILE);
+  if (cached && stat.mtimeMs === cachedMtime) {
+    return cached;
+  }
+  const data = JSON.parse(fs.readFileSync(PREFERENCES_FILE, "utf-8")) as Preferences;
+  cached = data;
+  cachedMtime = stat.mtimeMs;
+  return data;
+}
+
+function matchPatterns(text: string, patterns?: { regex: string; calendarId?: string }[]): boolean {
+  if (!patterns) return false;
+  return patterns.some((p) => {
+    try {
+      return new RegExp(p.regex, "i").test(text);
+    } catch (e) {
+      console.error(`Invalid regex pattern in preferences: ${p.regex}`);
+      return false;
+    }
+  });
+}
+
+function searchNode(
+  text: string,
+  name: string,
+  node: CategoryNode,
+  parent?: CategoryNode
+): ClassificationResult | null {
+  if (matchPatterns(text, node.patterns)) {
+    return {
+      category: name,
+      color: node.color ?? parent?.color,
+      googleCalendarId: node.googleCalendarId ?? parent?.googleCalendarId,
+      is_productive: node.is_productive ?? parent?.is_productive,
+    };
+  }
+  if (node.children) {
+    for (const [childName, childNode] of Object.entries(node.children)) {
+      const result = searchNode(text, childName, childNode, node);
+      if (result) {
+        return { ...result, subcategory: childName };
+      }
+    }
+  }
+  return null;
+}
+
+export function classify(summary: string): ClassificationResult {
+  const prefs = loadPreferences();
+  for (const [name, node] of Object.entries(prefs.categories)) {
+    const result = searchNode(summary, name, node);
+    if (result) return result;
+  }
+  return {
+    category: prefs.untracked_category || "untracked",
+    color: undefined,
+    googleCalendarId: undefined,
+  };
+}
+
+export function classifyOrError(summary: string): ClassificationResult {
+  const prefs = loadPreferences();
+  for (const [name, node] of Object.entries(prefs.categories)) {
+    const result = searchNode(summary, name, node);
+    if (result) return result;
+  }
+  throw new Error(
+    `Event summary "${summary}" does not match any category in preferences.json. ` +
+    `Please clarify or update the preferences to include this event type.`
+  );
+}
+
+export function getCategoryList(): string[] {
+  const prefs = loadPreferences();
+  return Object.keys(prefs.categories);
+}
