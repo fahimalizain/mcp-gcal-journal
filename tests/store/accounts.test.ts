@@ -10,7 +10,6 @@ const TEST_ACCOUNTS_FILE = "/tmp/mcp-gcs-test-accounts/accounts.json";
 vi.mock("../../src/config.js", () => ({
   BASE_DIR: "/tmp/mcp-gcs-test-accounts",
   ACCOUNTS_FILE: "/tmp/mcp-gcs-test-accounts/accounts.json",
-  PREFERENCES_FILE: "/tmp/mcp-gcs-test-accounts/preferences.json",
   CREDENTIALS_FILE: "/tmp/mcp-gcs-test-accounts/credentials.json",
 }));
 

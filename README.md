@@ -1,12 +1,12 @@
 # mcp-gcal-journal
 
-An MCP (Model Context Protocol) server for Google Calendar — a structured diary journal with multi-account, multi-calendar support, and auto-classification via a `preferences.json` matcher.
+An MCP (Model Context Protocol) server for Google Calendar — a structured diary journal with multi-account, multi-calendar support, and auto-classification via per-account preferences.
 
 ## Features
 
 - **Multi-account** — Add multiple Google accounts (e.g., `work`, `personal`).
 - **Multi-calendar** — List and target any calendar across any account.
-- **Structured classification** — Every `create_event` and `update_event` call classifies the event summary against `preferences.json` to auto-assign categories and colors.
+- **Structured classification** — Every `create_event` and `update_event` call classifies the event summary against per-account preferences to auto-assign categories and colors.
 - **OAuth CLI** — Built-in `gcj-auth` CLI handles Google OAuth flow and stores tokens securely.
 - **MCP stdio transport** — Works with any MCP client.
 
@@ -36,15 +36,17 @@ mkdir -p ~/.config/mcp-gcal-journal
 cp /path/to/client_secret.json ~/.config/mcp-gcal-journal/credentials.json
 ```
 
-### 3. Copy preferences.json
+### 3. Manage preferences via MCP tools
 
-Copy your `preferences.json` to the same directory:
+Preferences are stored per-account as `preferences_<account_id>.json` in the config directory. Use the MCP tools to create and manage them:
 
-```bash
-cp /path/to/preferences.json ~/.config/mcp-gcal-journal/preferences.json
-```
+- `get_preferences` — View current preferences
+- `add_category` — Add a new category with regex patterns
+- `update_category` — Modify an existing category
+- `remove_category` — Remove a category
+- `validate_preferences` — Validate against the schema
 
-The `preferences.json` defines category regex patterns and Google Calendar color IDs. See the existing example for structure.
+Or create a `preferences_<account_id>.json` manually in the config directory if you prefer.
 
 ### 4. Authenticate an account
 
@@ -109,6 +111,15 @@ Add this to your MCP client configuration:
 | `update_event` | Update an event (summary is re-classified if changed) |
 | `delete_event` | Delete an event by ID |
 | `classify_summary` | Classify a summary without creating an event |
+| `get_preferences` | View account preferences |
+| `get_category` | Get a category by dot path |
+| `list_categories` | List top-level category names |
+| `add_category` | Add a new category |
+| `update_category` | Update an existing category |
+| `remove_category` | Remove a category |
+| `update_untracked_category` | Update the untracked fallback |
+| `update_sleep` | Update sleep settings |
+| `validate_preferences` | Validate preferences schema |
 
 Every tool that interacts with a calendar requires `account_id`.
 
@@ -116,16 +127,16 @@ Every tool that interacts with a calendar requires `account_id`.
 
 ```
 ~/.config/mcp-gcal-journal/
-├── credentials.json      # Google OAuth client secrets
-├── accounts.json         # Stored tokens per account
-└── preferences.json      # Category regex patterns & color IDs
+├── credentials.json          # Google OAuth client secrets
+├── accounts.json             # Stored tokens per account
+└── preferences_<account_id>.json  # Category regex patterns & color IDs
 ```
 
 ## Troubleshooting
 
 - **Credentials file not found** — Ensure `~/.config/mcp-gcal-journal/credentials.json` exists.
 - **Account not found** — Run the auth CLI first for that account ID.
-- **Preferences file not found** — Ensure `preferences.json` is in the config directory.
+- **Preferences file not found** — Ensure `preferences_<account_id>.json` is in the config directory. Use `get_preferences` or `validate_preferences` to check.
 
 ## License
 

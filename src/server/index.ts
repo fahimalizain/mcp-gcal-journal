@@ -7,7 +7,16 @@ import {
 import { listAccounts, getAccount } from "../store/accounts.js";
 import { getCalendarClient, refreshCalendars } from "../auth/client.js";
 import { classify } from "../classifier/index.js";
-import { GoogleCalendarColorId } from "../classifier/types.js";
+import { GoogleCalendarColorId, CategoryNode, Pattern } from "../classifier/types.js";
+import {
+  loadPreferences,
+  savePreferences,
+  getCategoryNode,
+  setCategoryNode,
+  removeCategoryNode,
+  getCategoryList,
+  getSummary,
+} from "../preferences/manager.js";
 
 const server = new Server(
   { name: "mcp-gcal-journal", version: "1.0.0" },
@@ -80,7 +89,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "create_event",
-        description: "Create an event. Summary is classified against preferences.json to auto-assign color and calendar",
+        description: "Create an event. Summary is classified against account preferences to auto-assign color and calendar",
         inputSchema: {
           type: "object",
           properties: {
@@ -130,13 +139,168 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "classify_summary",
-        description: "Classify a summary against preferences.json without creating an event",
+        description: "Classify a summary against account-specific preferences without creating an event",
         inputSchema: {
           type: "object",
           properties: {
+            account_id: { type: "string", description: "Account identifier for per-account preferences" },
             summary: { type: "string" },
           },
-          required: ["summary"],
+          required: ["account_id", "summary"],
+        },
+      },
+      {
+        name: "get_preferences",
+        description: "Load and view preferences for an account",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            view: {
+              type: "string",
+              enum: ["summary", "raw"],
+              default: "summary",
+              description: "View mode: summary or raw JSON",
+            },
+            category: { type: "string", description: "Optional dot path to a specific category branch" },
+          },
+          required: ["account_id"],
+        },
+      },
+      {
+        name: "get_category",
+        description: "Get a category node by dot path",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            category: { type: "string", description: "Dot path to the category" },
+          },
+          required: ["account_id", "category"],
+        },
+      },
+      {
+        name: "list_categories",
+        description: "List top-level category names",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+          },
+          required: ["account_id"],
+        },
+      },
+      {
+        name: "add_category",
+        description: "Add a new category to preferences",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            parent: { type: "string", description: "Optional dot path to parent category" },
+            name: { type: "string", description: "Category key (snake_case, used in dot paths)" },
+            title: { type: "string", description: "Human-readable display title" },
+            color: { type: "string" },
+            googleCalendarColorId: { type: "string" },
+            is_productive: { type: "boolean" },
+            calendarId: { type: "string" },
+            patterns: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  regex: { type: "string" },
+                  calendarId: { type: "string" },
+                },
+                required: ["regex"],
+              },
+            },
+          },
+          required: ["account_id", "name", "title"],
+        },
+      },
+      {
+        name: "update_category",
+        description: "Update an existing category",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            category: { type: "string", description: "Dot path to the category" },
+            title: { type: "string" },
+            color: { type: "string" },
+            googleCalendarColorId: { type: "string" },
+            is_productive: { type: "boolean" },
+            calendarId: { type: "string" },
+            patterns: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  regex: { type: "string" },
+                  calendarId: { type: "string" },
+                },
+                required: ["regex"],
+              },
+            },
+          },
+          required: ["account_id", "category"],
+        },
+      },
+      {
+        name: "remove_category",
+        description: "Remove a category by dot path",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            category: { type: "string", description: "Dot path to the category" },
+          },
+          required: ["account_id", "category"],
+        },
+      },
+      {
+        name: "update_untracked_category",
+        description: "Update the untracked category fallback",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            category: { type: "string", description: "Untracked category name" },
+          },
+          required: ["account_id", "category"],
+        },
+      },
+      {
+        name: "update_sleep",
+        description: "Update sleep settings",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+            sleep: {
+              type: "object",
+              properties: {
+                category: { type: "string" },
+                daily_sleep_hours: { type: "number" },
+                start_marker: { type: "string" },
+                end_marker: { type: "string" },
+              },
+              required: ["category", "daily_sleep_hours", "start_marker", "end_marker"],
+            },
+          },
+          required: ["account_id", "sleep"],
+        },
+      },
+      {
+        name: "validate_preferences",
+        description: "Validate preferences for an account",
+        inputSchema: {
+          type: "object",
+          properties: {
+            account_id: { type: "string", description: "Account identifier" },
+          },
+          required: ["account_id"],
         },
       },
     ],
@@ -194,7 +358,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "create_event") {
       const account = validateAccount(args.account_id as string);
       const summary = args.summary as string;
-      const classification = classify(summary);
+      const classification = classify(summary, args.account_id as string);
       const client = await getCalendarClient(account);
       const calendarId = (args.calendar_id as string) || classification.calendarId || "primary";
       const res = await client.events.insert({
@@ -227,7 +391,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.end) body.end = { dateTime: args.end as string };
       if (args.color_id) body.colorId = args.color_id as GoogleCalendarColorId;
       if (args.summary) {
-        const classification = classify(args.summary as string);
+        const classification = classify(args.summary as string, args.account_id as string);
         if (!body.colorId && classification.googleCalendarColorId) {
           body.colorId = classification.googleCalendarColorId;
         }
@@ -255,9 +419,120 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "classify_summary") {
-      const result = classify(args.summary as string);
+      const result = classify(args.summary as string, args.account_id as string);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    if (name === "get_preferences") {
+      const prefs = loadPreferences(args.account_id as string);
+      if (args.category) {
+        const node = getCategoryNode(prefs, args.category as string);
+        if (!node) {
+          throw new Error(`Category "${args.category}" not found`);
+        }
+        return {
+          content: [{ type: "text", text: JSON.stringify(node, null, 2) }],
+        };
+      }
+      const view = (args.view as string) || "summary";
+      const result = view === "raw" ? prefs : getSummary(prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    if (name === "get_category") {
+      const prefs = loadPreferences(args.account_id as string);
+      const node = getCategoryNode(prefs, args.category as string);
+      if (!node) {
+        throw new Error(`Category "${args.category}" not found`);
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(node, null, 2) }],
+      };
+    }
+
+    if (name === "list_categories") {
+      const prefs = loadPreferences(args.account_id as string);
+      const categories = getCategoryList(prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify(categories, null, 2) }],
+      };
+    }
+
+    if (name === "add_category") {
+      const prefs = loadPreferences(args.account_id as string);
+      const node: CategoryNode = { title: args.title as string };
+      if (args.color !== undefined) node.color = args.color as string;
+      if (args.googleCalendarColorId !== undefined) node.googleCalendarColorId = args.googleCalendarColorId as GoogleCalendarColorId;
+      if (args.is_productive !== undefined) node.is_productive = args.is_productive as boolean;
+      if (args.calendarId !== undefined) node.calendarId = args.calendarId as string;
+      if (args.patterns !== undefined) node.patterns = args.patterns as Pattern[];
+      const parent = (args.parent as string) || "";
+      const dotPath = parent ? `${parent}.${args.name}` : (args.name as string);
+      setCategoryNode(prefs, dotPath, node);
+      savePreferences(args.account_id as string, prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, added: dotPath }, null, 2) }],
+      };
+    }
+
+    if (name === "update_category") {
+      const prefs = loadPreferences(args.account_id as string);
+      const node = getCategoryNode(prefs, args.category as string);
+      if (!node) {
+        throw new Error(`Category "${args.category}" not found`);
+      }
+      if (args.title !== undefined) node.title = args.title as string;
+      if (args.color !== undefined) node.color = args.color as string;
+      if (args.googleCalendarColorId !== undefined) node.googleCalendarColorId = args.googleCalendarColorId as GoogleCalendarColorId;
+      if (args.is_productive !== undefined) node.is_productive = args.is_productive as boolean;
+      if (args.calendarId !== undefined) node.calendarId = args.calendarId as string;
+      if (args.patterns !== undefined) node.patterns = args.patterns as Pattern[];
+      savePreferences(args.account_id as string, prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, updated: args.category }, null, 2) }],
+      };
+    }
+
+    if (name === "remove_category") {
+      const prefs = loadPreferences(args.account_id as string);
+      removeCategoryNode(prefs, args.category as string);
+      savePreferences(args.account_id as string, prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, removed: args.category }, null, 2) }],
+      };
+    }
+
+    if (name === "update_untracked_category") {
+      const prefs = loadPreferences(args.account_id as string);
+      prefs.untracked_category = args.category as string;
+      savePreferences(args.account_id as string, prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, untracked_category: args.category }, null, 2) }],
+      };
+    }
+
+    if (name === "update_sleep") {
+      const prefs = loadPreferences(args.account_id as string);
+      prefs.sleep = args.sleep as {
+        category: string;
+        daily_sleep_hours: number;
+        start_marker: string;
+        end_marker: string;
+      };
+      savePreferences(args.account_id as string, prefs);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, sleep: args.sleep }, null, 2) }],
+      };
+    }
+
+    if (name === "validate_preferences") {
+      loadPreferences(args.account_id as string);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ valid: true, message: "Preferences are valid" }, null, 2) }],
       };
     }
 

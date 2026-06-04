@@ -72,7 +72,7 @@ describe("server/index", () => {
       googleCalendarColorId: "1",
     };
     vi.mocked(classify).mockReturnValue(mockResult);
-    expect(classify("meeting")).toEqual(mockResult);
+    expect(classify("meeting", "test")).toEqual(mockResult);
   });
 
   it("getCalendarClient mock resolves", async () => {

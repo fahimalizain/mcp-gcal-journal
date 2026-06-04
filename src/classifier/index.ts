@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Ajv } from "ajv";
-import { PREFERENCES_FILE } from "../config.js";
+import { getPreferencesFile } from "../config.js";
 import { Preferences, ClassificationResult, CategoryNode } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,31 +12,31 @@ const schema = JSON.parse(fs.readFileSync(schemaPath, "utf-8"));
 const ajv = new Ajv({ allErrors: true });
 const validate = ajv.compile(schema);
 
-let cached: Preferences | null = null;
-let cachedMtime = 0;
+const cache = new Map<string, { data: Preferences; mtime: number }>();
 
-export function loadPreferences(): Preferences {
-  if (!fs.existsSync(PREFERENCES_FILE)) {
+export function loadPreferences(accountId: string): Preferences {
+  const filePath = getPreferencesFile(accountId);
+  if (!fs.existsSync(filePath)) {
     throw new Error(
-      `Preferences file not found at ${PREFERENCES_FILE}. Please copy your preferences.json there.`
+      `Preferences file not found at ${filePath}. Please create preferences_${accountId}.json.`
     );
   }
-  const stat = fs.statSync(PREFERENCES_FILE);
-  if (cached && stat.mtimeMs === cachedMtime) {
-    return cached;
+  const stat = fs.statSync(filePath);
+  const cached = cache.get(filePath);
+  if (cached && stat.mtimeMs === cached.mtime) {
+    return cached.data;
   }
-  const data = JSON.parse(fs.readFileSync(PREFERENCES_FILE, "utf-8")) as Preferences;
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Preferences;
   const valid = validate(data);
   if (!valid) {
     const errors = validate.errors
       ?.map((err) => `${err.instancePath || "root"}: ${err.message}`)
       .join("\n  ");
     throw new Error(
-      `Invalid preferences.json:\n  ${errors || "Unknown validation error"}`
+      `Invalid preferences_${accountId}.json:\n  ${errors || "Unknown validation error"}`
     );
   }
-  cached = data;
-  cachedMtime = stat.mtimeMs;
+  cache.set(filePath, { data, mtime: stat.mtimeMs });
   return data;
 }
 
@@ -81,8 +81,8 @@ function searchNode(
   return null;
 }
 
-export function classify(summary: string): ClassificationResult {
-  const prefs = loadPreferences();
+export function classify(summary: string, accountId: string): ClassificationResult {
+  const prefs = loadPreferences(accountId);
   for (const [name, node] of Object.entries(prefs.categories)) {
     const result = searchNode(summary, name, node);
     if (result) return result;
@@ -95,19 +95,19 @@ export function classify(summary: string): ClassificationResult {
   };
 }
 
-export function classifyOrError(summary: string): ClassificationResult {
-  const prefs = loadPreferences();
+export function classifyOrError(summary: string, accountId: string): ClassificationResult {
+  const prefs = loadPreferences(accountId);
   for (const [name, node] of Object.entries(prefs.categories)) {
     const result = searchNode(summary, name, node);
     if (result) return result;
   }
   throw new Error(
-    `Event summary "${summary}" does not match any category in preferences.json. ` +
+    `Event summary "${summary}" does not match any category in preferences_${accountId}.json. ` +
     `Please clarify or update the preferences to include this event type.`
   );
 }
 
-export function getCategoryList(): string[] {
-  const prefs = loadPreferences();
+export function getCategoryList(accountId: string): string[] {
+  const prefs = loadPreferences(accountId);
   return Object.keys(prefs.categories);
 }
