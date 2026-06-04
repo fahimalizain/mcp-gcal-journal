@@ -4,7 +4,7 @@ import { CREDENTIALS_FILE } from "../config.js";
 import { Account, CalendarMeta } from "../store/types.js";
 import { saveAccount } from "../store/accounts.js";
 
-function readCredentials() {
+export function readCredentials() {
   if (!fs.existsSync(CREDENTIALS_FILE)) {
     throw new Error(
       `Credentials file not found at ${CREDENTIALS_FILE}. Please download your Google OAuth client secrets JSON and save it there.`

@@ -1,18 +1,20 @@
 {
-  "name": "mcp-google-calendar-structured",
+  "name": "mcp-gcal-journal",
   "version": "1.0.0",
-  "description": "MCP server for Google Calendar Events with multi-account, multi-calendar, and structured preference classification",
+  "description": "MCP server for Google Calendar — a structured diary journal with auto-classification",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-google-calendar-structured": "./dist/index.js",
-    "gcs-auth": "./dist/auth/cli.js"
+    "mcp-gcal-journal": "./dist/index.js",
+    "gcj-auth": "./dist/auth/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "auth": "node dist/auth/cli.js",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "mcp",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.8"
   }
 }

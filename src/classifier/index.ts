@@ -74,7 +74,7 @@ function searchNode(
     for (const [childName, childNode] of Object.entries(node.children)) {
       const result = searchNode(text, childName, childNode, node);
       if (result) {
-        return { ...result, subcategory: childName };
+        return { ...result, category: name, subcategory: childName };
       }
     }
   }

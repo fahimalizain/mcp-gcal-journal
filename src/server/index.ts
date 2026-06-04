@@ -6,11 +6,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { listAccounts, getAccount } from "../store/accounts.js";
 import { getCalendarClient, refreshCalendars } from "../auth/client.js";
-import { classifyOrError, classify } from "../classifier/index.js";
+import { classify } from "../classifier/index.js";
 import { GoogleCalendarColorId } from "../classifier/types.js";
 
 const server = new Server(
-  { name: "mcp-google-calendar-structured", version: "1.0.0" },
+  { name: "mcp-gcal-journal", version: "1.0.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -194,7 +194,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "create_event") {
       const account = validateAccount(args.account_id as string);
       const summary = args.summary as string;
-      const classification = classifyOrError(summary);
+      const classification = classify(summary);
       const client = await getCalendarClient(account);
       const calendarId = (args.calendar_id as string) || classification.calendarId || "primary";
       const res = await client.events.insert({
@@ -227,7 +227,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.end) body.end = { dateTime: args.end as string };
       if (args.color_id) body.colorId = args.color_id as GoogleCalendarColorId;
       if (args.summary) {
-        const classification = classifyOrError(args.summary as string);
+        const classification = classify(args.summary as string);
         if (!body.colorId && classification.googleCalendarColorId) {
           body.colorId = classification.googleCalendarColorId;
         }

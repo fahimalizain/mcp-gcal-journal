@@ -1,13 +1,13 @@
-# mcp-google-calendar-structured
+# mcp-gcal-journal
 
-An MCP (Model Context Protocol) server for Google Calendar with multi-account, multi-calendar support, and structured event classification via a `preferences.json` matcher.
+An MCP (Model Context Protocol) server for Google Calendar — a structured diary journal with multi-account, multi-calendar support, and auto-classification via a `preferences.json` matcher.
 
 ## Features
 
 - **Multi-account** — Add multiple Google accounts (e.g., `work`, `personal`).
 - **Multi-calendar** — List and target any calendar across any account.
 - **Structured classification** — Every `create_event` and `update_event` call classifies the event summary against `preferences.json` to auto-assign categories and colors.
-- **OAuth CLI** — Built-in `gcs-auth` CLI handles Google OAuth flow and stores tokens securely.
+- **OAuth CLI** — Built-in `gcj-auth` CLI handles Google OAuth flow and stores tokens securely.
 - **MCP stdio transport** — Works with any MCP client.
 
 ## Requirements
@@ -32,8 +32,8 @@ npm install
 4. Copy it to:
 
 ```bash
-mkdir -p ~/.config/mcp-google-calendar-structured
-cp /path/to/client_secret.json ~/.config/mcp-google-calendar-structured/credentials.json
+mkdir -p ~/.config/mcp-gcal-journal
+cp /path/to/client_secret.json ~/.config/mcp-gcal-journal/credentials.json
 ```
 
 ### 3. Copy preferences.json
@@ -41,7 +41,7 @@ cp /path/to/client_secret.json ~/.config/mcp-google-calendar-structured/credenti
 Copy your `preferences.json` to the same directory:
 
 ```bash
-cp /path/to/preferences.json ~/.config/mcp-google-calendar-structured/preferences.json
+cp /path/to/preferences.json ~/.config/mcp-gcal-journal/preferences.json
 ```
 
 The `preferences.json` defines category regex patterns and Google Calendar color IDs. See the existing example for structure.
@@ -87,10 +87,10 @@ Add this to your MCP client configuration:
 ```json
 {
   "mcpServers": {
-    "google-calendar-structured": {
+    "gcal-journal": {
       "command": "node",
       "args": [
-        "/path/to/mcp-google-calendar-structured/dist/index.js"
+        "/path/to/mcp-gcal-journal/dist/index.js"
       ]
     }
   }
@@ -115,7 +115,7 @@ Every tool that interacts with a calendar requires `account_id`.
 ## File Structure
 
 ```
-~/.config/mcp-google-calendar-structured/
+~/.config/mcp-gcal-journal/
 ├── credentials.json      # Google OAuth client secrets
 ├── accounts.json         # Stored tokens per account
 └── preferences.json      # Category regex patterns & color IDs
@@ -123,7 +123,7 @@ Every tool that interacts with a calendar requires `account_id`.
 
 ## Troubleshooting
 
-- **Credentials file not found** — Ensure `~/.config/mcp-google-calendar-structured/credentials.json` exists.
+- **Credentials file not found** — Ensure `~/.config/mcp-gcal-journal/credentials.json` exists.
 - **Account not found** — Run the auth CLI first for that account ID.
 - **Preferences file not found** — Ensure `preferences.json` is in the config directory.
 
