@@ -134,6 +134,7 @@ Thumbs.db
 
 # IDE files
 .vscode/
+*.code-workspace
 .idea/
 *.swp
 *.swo
