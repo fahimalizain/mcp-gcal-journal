@@ -6,14 +6,14 @@ import {
 
 // Mock the MCP SDK before importing the server module
 vi.mock("@modelcontextprotocol/sdk/server/index.js", () => ({
-  Server: vi.fn().mockImplementation(() => ({
-    setRequestHandler: vi.fn(),
-    connect: vi.fn().mockResolvedValue(undefined),
-  })),
+  Server: vi.fn(function () {
+    this.setRequestHandler = vi.fn();
+    this.connect = vi.fn().mockResolvedValue(undefined);
+  }),
 }));
 
 vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({
-  StdioServerTransport: vi.fn().mockImplementation(() => ({})),
+  StdioServerTransport: vi.fn(function () {}),
 }));
 
 vi.mock("@modelcontextprotocol/sdk/types.js", async () => {
@@ -44,6 +44,7 @@ vi.mock("../../src/classifier/index.js", () => ({
 import { getAccount } from "../../src/store/accounts.js";
 import { classify } from "../../src/classifier/index.js";
 import { getCalendarClient } from "../../src/auth/client.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 describe("server/index", () => {
   beforeEach(() => {
@@ -80,5 +81,96 @@ describe("server/index", () => {
     vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
     const result = await getCalendarClient({ account_id: "a", email: "e", refresh_token: "rt" });
     expect(result).toBe(mockClient);
+  });
+
+  it("list_events passes q parameter to the calendar API", async () => {
+    const mockAccount = {
+      account_id: "test",
+      email: "test@example.com",
+      refresh_token: "rt",
+    };
+    vi.mocked(getAccount).mockReturnValue(mockAccount);
+
+    const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
+    const mockClient = { events: { list: listFn } };
+    vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+
+    // Re-import the server module so its import-time code runs with the
+    // current mocks (the module registers handlers on Server on import).
+    vi.resetModules();
+    const { startServer } = await import("../../src/server/index.js");
+    await startServer();
+
+    // The Server mock was instantiated with setRequestHandler. The second
+    // call (index 1) is the CallToolRequestSchema handler.
+    const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+    const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+    const request = {
+      params: {
+        name: "list_events",
+        arguments: {
+          account_id: "test",
+          calendar_id: "primary",
+          time_min: "2024-01-01T00:00:00Z",
+          time_max: "2024-01-02T00:00:00Z",
+          q: "meeting",
+        },
+      },
+    };
+
+    await callToolHandler(request);
+
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        calendarId: "primary",
+        timeMin: "2024-01-01T00:00:00Z",
+        timeMax: "2024-01-02T00:00:00Z",
+        q: "meeting",
+      })
+    );
+  });
+
+  it("list_events works without q parameter", async () => {
+    const mockAccount = {
+      account_id: "test",
+      email: "test@example.com",
+      refresh_token: "rt",
+    };
+    vi.mocked(getAccount).mockReturnValue(mockAccount);
+
+    const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
+    const mockClient = { events: { list: listFn } };
+    vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+
+    vi.resetModules();
+    const { startServer } = await import("../../src/server/index.js");
+    await startServer();
+
+    const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+    const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+    const request = {
+      params: {
+        name: "list_events",
+        arguments: {
+          account_id: "test",
+          calendar_id: "primary",
+          time_min: "2024-01-01T00:00:00Z",
+          time_max: "2024-01-02T00:00:00Z",
+        },
+      },
+    };
+
+    await callToolHandler(request);
+
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        calendarId: "primary",
+        timeMin: "2024-01-01T00:00:00Z",
+        timeMax: "2024-01-02T00:00:00Z",
+        q: undefined,
+      })
+    );
   });
 });

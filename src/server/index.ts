@@ -70,6 +70,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             time_min: { type: "string", description: "ISO datetime with offset" },
             time_max: { type: "string", description: "ISO datetime with offset" },
             max_results: { type: "number", default: 50 },
+            q: { type: "string", description: "Free text search query (searches summary, description, location, attendees)" },
           },
           required: ["account_id", "calendar_id", "time_min", "time_max"],
         },
@@ -335,6 +336,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         timeMin: args.time_min as string,
         timeMax: args.time_max as string,
         maxResults: (args.max_results as number) || 50,
+        q: (args.q as string) || undefined,
         singleEvents: true,
         orderBy: "startTime",
       });
