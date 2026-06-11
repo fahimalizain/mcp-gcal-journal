@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import fs from "fs";
-import { CREDENTIALS_FILE } from "../config.js";
+import { BASE_DIR, CREDENTIALS_FILE, COLORS_CACHE_FILE } from "../config.js";
 import { Account, CalendarMeta } from "../store/types.js";
 import { saveAccount } from "../store/accounts.js";
 
@@ -96,13 +96,50 @@ export function closestGoogleColorId(hexColor: string, palette: Map<number, stri
   return String(bestId);
 }
 
-export async function fetchEventColors(account: Account): Promise<Map<number, string>> {
+const COLORS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function readFreshColorsCache(): Map<number, string> | null {
+  if (!fs.existsSync(COLORS_CACHE_FILE)) {
+    return null;
+  }
+  const stat = fs.statSync(COLORS_CACHE_FILE);
+  if (Date.now() - stat.mtimeMs >= COLORS_CACHE_TTL_MS) {
+    return null;
+  }
+  const raw = JSON.parse(fs.readFileSync(COLORS_CACHE_FILE, "utf-8")) as Record<string, string>;
+  const palette = new Map<number, string>();
+  for (const [id, hex] of Object.entries(raw)) {
+    palette.set(parseInt(id, 10), hex);
+  }
+  return palette;
+}
+
+function writeColorsCache(palette: Map<number, string>): void {
+  const obj: Record<string, string> = {};
+  for (const [id, hex] of palette) {
+    obj[String(id)] = hex;
+  }
+  fs.mkdirSync(BASE_DIR, { recursive: true });
+  fs.writeFileSync(COLORS_CACHE_FILE, JSON.stringify(obj));
+}
+
+async function fetchEventColorsFromApi(account: Account): Promise<Map<number, string>> {
   const client = await getCalendarClient(account);
   const res = await client.colors.get({});
   const eventColors = res.data.event || {};
   const palette = new Map<number, string>();
   for (const [id, colorDef] of Object.entries(eventColors)) {
-    palette.set(parseInt(id), (colorDef as { background: string }).background);
+    palette.set(parseInt(id, 10), (colorDef as { background: string }).background);
   }
+  return palette;
+}
+
+export async function fetchEventColors(account: Account): Promise<Map<number, string>> {
+  const cached = readFreshColorsCache();
+  if (cached) {
+    return cached;
+  }
+  const palette = await fetchEventColorsFromApi(account);
+  writeColorsCache(palette);
   return palette;
 }
