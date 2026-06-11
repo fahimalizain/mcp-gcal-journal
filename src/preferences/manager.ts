@@ -181,7 +181,6 @@ export function getSummary(prefs: Preferences): any {
       title: node.title,
       patternCount: node.patterns?.length ?? 0,
       color: node.color,
-      googleCalendarColorId: node.googleCalendarColorId,
       is_productive: node.is_productive,
       hasChildren,
       childrenCount: hasChildren ? Object.keys(node.children!).length : 0,

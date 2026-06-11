@@ -16,7 +16,6 @@ const validPreferences = {
     work: {
       title: "Work",
       color: "#4285F4",
-      googleCalendarColorId: "1",
       patterns: [{ regex: "meeting" }, { regex: "standup" }],
       children: {
         deep_work: {
@@ -102,7 +101,6 @@ describe("classifier", () => {
       const result = classify("team meeting", "test");
       expect(result.category).toBe("work");
       expect(result.color).toBe("#4285F4");
-      expect(result.googleCalendarColorId).toBe("1");
     });
 
     it("matches child patterns with subcategory", async () => {

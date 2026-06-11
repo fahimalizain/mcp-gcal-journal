@@ -60,7 +60,7 @@ All runtime state lives in `~/.config/mcp-gcal-journal/`:
 ## Preferences & Classification
 
 - Preferences are a tree of `CategoryNode`s under `categories`. Each node can have `patterns` (regex strings, case-insensitive) and optional `children` (nested subcategories).
-- `classify(summary, accountId)` walks the tree, matches the first regex, and returns `category`, `subcategory`, `color`, `googleCalendarColorId`, `calendarId`, `is_productive`.
+- `classify(summary, accountId)` walks the tree, matches the first regex, and returns `category`, `subcategory`, `color`, `calendarId`, `is_productive`.
 - If nothing matches, falls back to `untracked_category`.
 - `loadPreferences` caches by `mtimeMs` and validates against `schema.json` via AJV.
 - `preferences/manager.ts` provides dot-path navigation (`work.deep_work`) for CRUD operations.
