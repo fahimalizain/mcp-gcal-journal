@@ -44,7 +44,7 @@ function matchPatterns(text: string, patterns?: { regex: string; calendarId?: st
   if (!patterns) return null;
   for (const p of patterns) {
     try {
-      if (new RegExp(p.regex, "i").test(text)) {
+      if (new RegExp(p.regex).test(text)) {
         return p;
       }
     } catch (e) {
