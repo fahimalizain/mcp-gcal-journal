@@ -115,10 +115,18 @@ describe("classifier", () => {
       expect(result.calendarId).toBe("deep@cal");
     });
 
-    it("is case insensitive", async () => {
+    it("is case sensitive by default", async () => {
       fs.writeFileSync(TEST_PREFERENCES_FILE, JSON.stringify(validPreferences));
       const { classify } = await import("../../src/classifier/index.js");
+      // "MEETING" (uppercase) does NOT match pattern "meeting" (lowercase)
       const result = classify("MEETING with boss", "test");
+      expect(result.category).toBe("untracked");
+    });
+
+    it("matches with exact case", async () => {
+      fs.writeFileSync(TEST_PREFERENCES_FILE, JSON.stringify(validPreferences));
+      const { classify } = await import("../../src/classifier/index.js");
+      const result = classify("meeting with boss", "test");
       expect(result.category).toBe("work");
     });
 
