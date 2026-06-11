@@ -39,10 +39,11 @@ vi.mock("../../src/auth/client.js", () => ({
 
 vi.mock("../../src/classifier/index.js", () => ({
   classify: vi.fn(),
+  classifyOrError: vi.fn(),
 }));
 
 import { getAccount } from "../../src/store/accounts.js";
-import { classify } from "../../src/classifier/index.js";
+import { classify, classifyOrError } from "../../src/classifier/index.js";
 import { getCalendarClient } from "../../src/auth/client.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
@@ -172,5 +173,319 @@ describe("server/index", () => {
         q: undefined,
       })
     );
+  });
+
+  describe("create_event", () => {
+    it("creates event with classified summary", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123", summary: "Meeting" } });
+      const mockClient = { events: { insert: insertFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      const result = await callToolHandler({
+        params: {
+          name: "create_event",
+          arguments: {
+            account_id: "test",
+            summary: "team meeting",
+            start: "2024-06-01T09:00:00+05:30",
+            end: "2024-06-01T10:00:00+05:30",
+          },
+        },
+      });
+
+      expect(classifyOrError).toHaveBeenCalledWith("team meeting", "test");
+      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+        calendarId: "work@cal",
+        requestBody: expect.objectContaining({
+          summary: "team meeting",
+          colorId: "1",
+          start: { dateTime: "2024-06-01T09:00:00+05:30" },
+          end: { dateTime: "2024-06-01T10:00:00+05:30" },
+        }),
+      }));
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.classification.category).toBe("work");
+    });
+
+    it("creates event with explicit calendar_id override", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123" } });
+      const mockClient = { events: { insert: insertFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      await callToolHandler({
+        params: {
+          name: "create_event",
+          arguments: {
+            account_id: "test",
+            summary: "team meeting",
+            calendar_id: "custom@cal",
+            start: "2024-06-01T09:00:00+05:30",
+            end: "2024-06-01T10:00:00+05:30",
+          },
+        },
+      });
+
+      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "custom@cal" }));
+    });
+
+    it("creates event with explicit color_id override", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123" } });
+      const mockClient = { events: { insert: insertFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      await callToolHandler({
+        params: {
+          name: "create_event",
+          arguments: {
+            account_id: "test",
+            summary: "team meeting",
+            color_id: "5",
+            start: "2024-06-01T09:00:00+05:30",
+            end: "2024-06-01T10:00:00+05:30",
+          },
+        },
+      });
+
+      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+        requestBody: expect.objectContaining({ colorId: "5" }),
+      }));
+    });
+
+    it("creates event with description and location", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_456", summary: "Deep Work" } });
+      const mockClient = { events: { insert: insertFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "work.deep_work", color: "#34A853", googleCalendarColorId: "2", calendarId: "deep@cal", is_productive: true,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      await callToolHandler({
+        params: {
+          name: "create_event",
+          arguments: {
+            account_id: "test",
+            summary: "focus session",
+            description: "Planning and coding session",
+            location: "Office",
+            start: "2024-06-01T14:00:00+05:30",
+            end: "2024-06-01T16:00:00+05:30",
+          },
+        },
+      });
+
+      expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+        requestBody: expect.objectContaining({
+          description: "Planning and coding session",
+          location: "Office",
+        }),
+      }));
+    });
+
+    it("rejects unclassifiable summary with isError", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const insertFn = vi.fn();
+      const mockClient = { events: { insert: insertFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockImplementation(() => {
+        throw new Error('Event summary "random" does not match any category in preferences_test.json');
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      const result = await callToolHandler({
+        params: {
+          name: "create_event",
+          arguments: {
+            account_id: "test",
+            summary: "random",
+            start: "2024-06-01T09:00:00+05:30",
+            end: "2024-06-01T10:00:00+05:30",
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match any category");
+      expect(insertFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("update_event", () => {
+    it("updates event summary with re-classification", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1", summary: "Updated Meeting" } });
+      const mockClient = { events: { patch: patchFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      const result = await callToolHandler({
+        params: {
+          name: "update_event",
+          arguments: {
+            account_id: "test",
+            calendar_id: "primary",
+            event_id: "evt_1",
+            summary: "daily standup",
+          },
+        },
+      });
+
+      expect(classifyOrError).toHaveBeenCalledWith("daily standup", "test");
+      expect(patchFn).toHaveBeenCalledWith(expect.objectContaining({
+        calendarId: "primary",
+        eventId: "evt_1",
+        requestBody: expect.objectContaining({
+          summary: "daily standup",
+          colorId: "1",
+        }),
+      }));
+      expect(result.content[0].text).toContain("Updated Meeting");
+    });
+
+    it("updates event without summary — no classify call", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1", summary: "Original Event" } });
+      const mockClient = { events: { patch: patchFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      await callToolHandler({
+        params: {
+          name: "update_event",
+          arguments: {
+            account_id: "test",
+            calendar_id: "primary",
+            event_id: "evt_1",
+            description: "Updated description only",
+          },
+        },
+      });
+
+      expect(classifyOrError).not.toHaveBeenCalled();
+      expect(patchFn).toHaveBeenCalledWith(expect.objectContaining({
+        requestBody: expect.objectContaining({
+          description: "Updated description only",
+        }),
+      }));
+    });
+
+    it("rejects update with unclassifiable summary", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const patchFn = vi.fn();
+      const mockClient = { events: { patch: patchFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockImplementation(() => {
+        throw new Error('Event summary "unknown" does not match any category in preferences_test.json');
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      const result = await callToolHandler({
+        params: {
+          name: "update_event",
+          arguments: {
+            account_id: "test",
+            calendar_id: "primary",
+            event_id: "evt_1",
+            summary: "unknown",
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match any category");
+      expect(patchFn).not.toHaveBeenCalled();
+    });
+
+    it("uses explicit color_id over classified color", async () => {
+      const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
+      vi.mocked(getAccount).mockReturnValue(mockAccount);
+      const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1" } });
+      const mockClient = { events: { patch: patchFn } };
+      vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
+      vi.mocked(classifyOrError).mockReturnValue({
+        category: "personal", color: "#FBBC05", googleCalendarColorId: "4", is_productive: false,
+      });
+      vi.resetModules();
+      const { startServer } = await import("../../src/server/index.js");
+      await startServer();
+      const setRequestHandler = vi.mocked(Server).mock.results[0].value.setRequestHandler;
+      const callToolHandler = setRequestHandler.mock.calls[1][1];
+
+      await callToolHandler({
+        params: {
+          name: "update_event",
+          arguments: {
+            account_id: "test",
+            calendar_id: "primary",
+            event_id: "evt_1",
+            summary: "gym session",
+            color_id: "1",
+          },
+        },
+      });
+
+      expect(patchFn).toHaveBeenCalledWith(expect.objectContaining({
+        requestBody: expect.objectContaining({ colorId: "1" }),
+      }));
+    });
   });
 });

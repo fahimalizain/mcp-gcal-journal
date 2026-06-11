@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { listAccounts, getAccount } from "../store/accounts.js";
 import { getCalendarClient, refreshCalendars } from "../auth/client.js";
-import { classify } from "../classifier/index.js";
+import { classify, classifyOrError } from "../classifier/index.js";
 import { GoogleCalendarColorId, CategoryNode, Pattern } from "../classifier/types.js";
 import {
   loadPreferences,
@@ -360,7 +360,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "create_event") {
       const account = validateAccount(args.account_id as string);
       const summary = args.summary as string;
-      const classification = classify(summary, args.account_id as string);
+      const classification = classifyOrError(summary, args.account_id as string);
       const client = await getCalendarClient(account);
       const calendarId = (args.calendar_id as string) || classification.calendarId || "primary";
       const res = await client.events.insert({
@@ -393,7 +393,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.end) body.end = { dateTime: args.end as string };
       if (args.color_id) body.colorId = args.color_id as GoogleCalendarColorId;
       if (args.summary) {
-        const classification = classify(args.summary as string, args.account_id as string);
+        const classification = classifyOrError(args.summary as string, args.account_id as string);
         if (!body.colorId && classification.googleCalendarColorId) {
           body.colorId = classification.googleCalendarColorId;
         }
