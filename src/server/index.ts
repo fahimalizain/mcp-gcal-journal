@@ -5,9 +5,9 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { listAccounts, getAccount } from "../store/accounts.js";
-import { getCalendarClient, refreshCalendars } from "../auth/client.js";
+import { getCalendarClient, refreshCalendars, fetchEventColors, closestGoogleColorId } from "../auth/client.js";
 import { classify, classifyOrError } from "../classifier/index.js";
-import { GoogleCalendarColorId, CategoryNode, Pattern } from "../classifier/types.js";
+import { CategoryNode, Pattern } from "../classifier/types.js";
 import {
   loadPreferences,
   savePreferences,
@@ -37,7 +37,7 @@ interface EventBody {
   location?: string;
   start?: { dateTime: string };
   end?: { dateTime: string };
-  colorId?: GoogleCalendarColorId;
+  colorId?: string;
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -202,7 +202,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             name: { type: "string", description: "Category key (snake_case, used in dot paths)" },
             title: { type: "string", description: "Human-readable display title" },
             color: { type: "string" },
-            googleCalendarColorId: { type: "string" },
             is_productive: { type: "boolean" },
             calendarId: { type: "string" },
             patterns: {
@@ -230,7 +229,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             category: { type: "string", description: "Dot path to the category" },
             title: { type: "string" },
             color: { type: "string" },
-            googleCalendarColorId: { type: "string" },
             is_productive: { type: "boolean" },
             calendarId: { type: "string" },
             patterns: {
@@ -363,6 +361,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const classification = classifyOrError(summary, args.account_id as string);
       const client = await getCalendarClient(account);
       const calendarId = (args.calendar_id as string) || classification.calendarId || "primary";
+      let colorId: string | undefined = (args.color_id as string) || undefined;
+      if (!colorId && classification.color) {
+        const palette = await fetchEventColors(account);
+        colorId = closestGoogleColorId(classification.color, palette);
+      }
       const res = await client.events.insert({
         calendarId,
         requestBody: {
@@ -371,7 +374,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           location: (args.location as string) || undefined,
           start: { dateTime: args.start as string },
           end: { dateTime: args.end as string },
-          colorId: (args.color_id as string) || classification.googleCalendarColorId || undefined,
+          colorId,
         },
       });
       return {
@@ -391,11 +394,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (args.location) body.location = args.location as string;
       if (args.start) body.start = { dateTime: args.start as string };
       if (args.end) body.end = { dateTime: args.end as string };
-      if (args.color_id) body.colorId = args.color_id as GoogleCalendarColorId;
+      if (args.color_id) body.colorId = args.color_id as string;
       if (args.summary) {
         const classification = classifyOrError(args.summary as string, args.account_id as string);
-        if (!body.colorId && classification.googleCalendarColorId) {
-          body.colorId = classification.googleCalendarColorId;
+        if (!body.colorId && classification.color) {
+          const palette = await fetchEventColors(account);
+          body.colorId = closestGoogleColorId(classification.color, palette);
         }
       }
       const res = await client.events.patch({
@@ -468,7 +472,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const prefs = loadPreferences(args.account_id as string);
       const node: CategoryNode = { title: args.title as string };
       if (args.color !== undefined) node.color = args.color as string;
-      if (args.googleCalendarColorId !== undefined) node.googleCalendarColorId = args.googleCalendarColorId as GoogleCalendarColorId;
       if (args.is_productive !== undefined) node.is_productive = args.is_productive as boolean;
       if (args.calendarId !== undefined) node.calendarId = args.calendarId as string;
       if (args.patterns !== undefined) node.patterns = args.patterns as Pattern[];
@@ -489,7 +492,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       if (args.title !== undefined) node.title = args.title as string;
       if (args.color !== undefined) node.color = args.color as string;
-      if (args.googleCalendarColorId !== undefined) node.googleCalendarColorId = args.googleCalendarColorId as GoogleCalendarColorId;
       if (args.is_productive !== undefined) node.is_productive = args.is_productive as boolean;
       if (args.calendarId !== undefined) node.calendarId = args.calendarId as string;
       if (args.patterns !== undefined) node.patterns = args.patterns as Pattern[];

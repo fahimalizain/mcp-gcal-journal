@@ -1,16 +1,3 @@
-export type GoogleCalendarColorId =
-  | "1"
-  | "2"
-  | "3"
-  | "4"
-  | "5"
-  | "6"
-  | "7"
-  | "8"
-  | "9"
-  | "10"
-  | "11";
-
 export interface Pattern {
   regex: string;
   calendarId?: string;
@@ -19,7 +6,6 @@ export interface Pattern {
 export interface CategoryNode {
   title: string;
   color?: string;
-  googleCalendarColorId?: GoogleCalendarColorId;
   calendarId?: string;
   is_productive?: boolean;
   patterns?: Pattern[];
@@ -41,7 +27,6 @@ export interface ClassificationResult {
   category: string;
   subcategory?: string;
   color?: string;
-  googleCalendarColorId?: GoogleCalendarColorId;
   calendarId?: string;
   is_productive?: boolean;
 }

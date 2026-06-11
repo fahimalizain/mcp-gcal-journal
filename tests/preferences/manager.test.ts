@@ -13,7 +13,6 @@ const validPreferences = {
     work: {
       title: "Work",
       color: "#4285F4",
-      googleCalendarColorId: "1",
       patterns: [{ regex: "meeting" }, { regex: "standup" }],
       children: {
         deep_work: {

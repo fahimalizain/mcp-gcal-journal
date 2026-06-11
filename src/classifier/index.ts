@@ -65,7 +65,6 @@ function searchNode(
     return {
       category: name,
       color: node.color ?? parent?.color,
-      googleCalendarColorId: node.googleCalendarColorId ?? parent?.googleCalendarColorId,
       calendarId: matchedPattern.calendarId ?? node.calendarId ?? parent?.calendarId,
       is_productive: node.is_productive ?? parent?.is_productive,
     };
@@ -90,7 +89,6 @@ export function classify(summary: string, accountId: string): ClassificationResu
   return {
     category: prefs.untracked_category || "untracked",
     color: undefined,
-    googleCalendarColorId: undefined,
     calendarId: undefined,
   };
 }

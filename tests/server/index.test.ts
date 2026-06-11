@@ -32,10 +32,47 @@ vi.mock("../../src/store/accounts.js", () => ({
   getAccount: vi.fn(),
 }));
 
-vi.mock("../../src/auth/client.js", () => ({
+const mockEventColorsPalette = {
+  data: {
+    event: {
+      "1": { background: "#a4bdfc" },
+      "2": { background: "#7ae7bf" },
+      "3": { background: "#dbadff" },
+      "4": { background: "#ff887c" },
+      "5": { background: "#fbd75b" },
+      "6": { background: "#ffb878" },
+      "7": { background: "#46d6db" },
+      "8": { background: "#e1e1e1" },
+      "9": { background: "#5484ed" },
+      "10": { background: "#51b749" },
+      "11": { background: "#dc2127" },
+    },
+  },
+};
+
+const { getCalendarClient, refreshCalendars } = vi.hoisted(() => ({
   getCalendarClient: vi.fn(),
   refreshCalendars: vi.fn(),
 }));
+
+vi.mock("../../src/auth/client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/auth/client.js")>();
+  return {
+    ...actual,
+    getCalendarClient,
+    refreshCalendars,
+    fetchEventColors: async (account: Parameters<typeof actual.fetchEventColors>[0]) => {
+      const client = await getCalendarClient(account);
+      const res = await client.colors.get({});
+      const eventColors = res.data.event || {};
+      const palette = new Map<number, string>();
+      for (const [id, colorDef] of Object.entries(eventColors)) {
+        palette.set(parseInt(id), (colorDef as { background: string }).background);
+      }
+      return palette;
+    },
+  };
+});
 
 vi.mock("../../src/classifier/index.js", () => ({
   classify: vi.fn(),
@@ -44,7 +81,22 @@ vi.mock("../../src/classifier/index.js", () => ({
 
 import { getAccount } from "../../src/store/accounts.js";
 import { classify, classifyOrError } from "../../src/classifier/index.js";
-import { getCalendarClient } from "../../src/auth/client.js";
+import { closestGoogleColorId } from "../../src/auth/client.js";
+
+function paletteFromMockColors(): Map<number, string> {
+  const palette = new Map<number, string>();
+  for (const [id, colorDef] of Object.entries(mockEventColorsPalette.data.event)) {
+    palette.set(parseInt(id), colorDef.background);
+  }
+  return palette;
+}
+
+function withColorsMock(events: Record<string, unknown>) {
+  return {
+    events,
+    colors: { get: vi.fn().mockResolvedValue(mockEventColorsPalette) },
+  };
+}
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 describe("server/index", () => {
@@ -71,14 +123,13 @@ describe("server/index", () => {
     const mockResult = {
       category: "work",
       color: "#4285F4",
-      googleCalendarColorId: "1",
     };
     vi.mocked(classify).mockReturnValue(mockResult);
     expect(classify("meeting", "test")).toEqual(mockResult);
   });
 
   it("getCalendarClient mock resolves", async () => {
-    const mockClient = { events: { list: vi.fn() } };
+    const mockClient = withColorsMock({ list: vi.fn() });
     vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
     const result = await getCalendarClient({ account_id: "a", email: "e", refresh_token: "rt" });
     expect(result).toBe(mockClient);
@@ -93,7 +144,7 @@ describe("server/index", () => {
     vi.mocked(getAccount).mockReturnValue(mockAccount);
 
     const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
-    const mockClient = { events: { list: listFn } };
+    const mockClient = withColorsMock({ list: listFn });
     vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
 
     // Re-import the server module so its import-time code runs with the
@@ -141,7 +192,7 @@ describe("server/index", () => {
     vi.mocked(getAccount).mockReturnValue(mockAccount);
 
     const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
-    const mockClient = { events: { list: listFn } };
+    const mockClient = withColorsMock({ list: listFn });
     vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
 
     vi.resetModules();
@@ -180,10 +231,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123", summary: "Meeting" } });
-      const mockClient = { events: { insert: insertFn } };
+      const mockClient = withColorsMock({ insert: insertFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+        category: "work", color: "#4285F4", calendarId: "work@cal", is_productive: true,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -208,7 +259,7 @@ describe("server/index", () => {
         calendarId: "work@cal",
         requestBody: expect.objectContaining({
           summary: "team meeting",
-          colorId: "1",
+          colorId: closestGoogleColorId("#4285F4", paletteFromMockColors()),
           start: { dateTime: "2024-06-01T09:00:00+05:30" },
           end: { dateTime: "2024-06-01T10:00:00+05:30" },
         }),
@@ -221,10 +272,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123" } });
-      const mockClient = { events: { insert: insertFn } };
+      const mockClient = withColorsMock({ insert: insertFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+        category: "work", color: "#4285F4", calendarId: "work@cal", is_productive: true,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -252,10 +303,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_123" } });
-      const mockClient = { events: { insert: insertFn } };
+      const mockClient = withColorsMock({ insert: insertFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+        category: "work", color: "#4285F4", calendarId: "work@cal", is_productive: true,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -285,10 +336,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const insertFn = vi.fn().mockResolvedValue({ data: { id: "evt_456", summary: "Deep Work" } });
-      const mockClient = { events: { insert: insertFn } };
+      const mockClient = withColorsMock({ insert: insertFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "work.deep_work", color: "#34A853", googleCalendarColorId: "2", calendarId: "deep@cal", is_productive: true,
+        category: "work.deep_work", color: "#34A853", calendarId: "deep@cal", is_productive: true,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -322,7 +373,7 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const insertFn = vi.fn();
-      const mockClient = { events: { insert: insertFn } };
+      const mockClient = withColorsMock({ insert: insertFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockImplementation(() => {
         throw new Error('Event summary "random" does not match any category in preferences_test.json');
@@ -356,10 +407,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1", summary: "Updated Meeting" } });
-      const mockClient = { events: { patch: patchFn } };
+      const mockClient = withColorsMock({ patch: patchFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "work", color: "#4285F4", googleCalendarColorId: "1", calendarId: "work@cal", is_productive: true,
+        category: "work", color: "#4285F4", calendarId: "work@cal", is_productive: true,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -385,7 +436,7 @@ describe("server/index", () => {
         eventId: "evt_1",
         requestBody: expect.objectContaining({
           summary: "daily standup",
-          colorId: "1",
+          colorId: closestGoogleColorId("#4285F4", paletteFromMockColors()),
         }),
       }));
       expect(result.content[0].text).toContain("Updated Meeting");
@@ -395,7 +446,7 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1", summary: "Original Event" } });
-      const mockClient = { events: { patch: patchFn } };
+      const mockClient = withColorsMock({ patch: patchFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");
@@ -427,7 +478,7 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const patchFn = vi.fn();
-      const mockClient = { events: { patch: patchFn } };
+      const mockClient = withColorsMock({ patch: patchFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockImplementation(() => {
         throw new Error('Event summary "unknown" does not match any category in preferences_test.json');
@@ -459,10 +510,10 @@ describe("server/index", () => {
       const mockAccount = { account_id: "test", email: "test@example.com", refresh_token: "rt" };
       vi.mocked(getAccount).mockReturnValue(mockAccount);
       const patchFn = vi.fn().mockResolvedValue({ data: { id: "evt_1" } });
-      const mockClient = { events: { patch: patchFn } };
+      const mockClient = withColorsMock({ patch: patchFn });
       vi.mocked(getCalendarClient).mockResolvedValue(mockClient as any);
       vi.mocked(classifyOrError).mockReturnValue({
-        category: "personal", color: "#FBBC05", googleCalendarColorId: "4", is_productive: false,
+        category: "personal", color: "#FBBC05", is_productive: false,
       });
       vi.resetModules();
       const { startServer } = await import("../../src/server/index.js");

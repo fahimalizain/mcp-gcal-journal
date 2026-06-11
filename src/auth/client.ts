@@ -71,3 +71,38 @@ export async function refreshCalendars(account: Account): Promise<Account> {
   saveAccount(account);
   return account;
 }
+
+export function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16),
+  ];
+}
+
+export function closestGoogleColorId(hexColor: string, palette: Map<number, string>): string {
+  const [r1, g1, b1] = hexToRgb(hexColor);
+  let bestId = 1;
+  let bestDist = Infinity;
+  for (const [id, hexBg] of palette) {
+    const [r2, g2, b2] = hexToRgb(hexBg);
+    const dist = (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestId = id;
+    }
+  }
+  return String(bestId);
+}
+
+export async function fetchEventColors(account: Account): Promise<Map<number, string>> {
+  const client = await getCalendarClient(account);
+  const res = await client.colors.get({});
+  const eventColors = res.data.event || {};
+  const palette = new Map<number, string>();
+  for (const [id, colorDef] of Object.entries(eventColors)) {
+    palette.set(parseInt(id), (colorDef as { background: string }).background);
+  }
+  return palette;
+}
